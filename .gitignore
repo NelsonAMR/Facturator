@@ -1,0 +1,8 @@
+.cursor/
+.vscode/
+node_modules/
+dist/
+data/facturas.json
+data/clientes.json
+.env
+.DS_Store
