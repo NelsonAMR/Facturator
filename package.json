@@ -6,7 +6,6 @@
 	"engines": {
 		"node": "24.x"
 	},
-	"packageManager": "pnpm@11.x",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
 		"dev": "tsx --watch src/index.ts",
@@ -19,7 +18,7 @@
 	"devEngines": {
 		"packageManager": {
 			"name": "pnpm",
-			"version": "^11.5.2",
+			"version": "^11.x",
 			"onFail": "download"
 		}
 	},
