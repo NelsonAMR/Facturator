@@ -3,10 +3,17 @@ import * as p from "@clack/prompts";
 import { Command } from "commander";
 import type { Cliente } from "./domain/entities/Cliente.js";
 import type { FacturaLog } from "./domain/entities/Factura.js";
+import type { EmitirFacturaPayload } from "./domain/ports/billing.port.js";
 import { calcularDesgloseFiscal } from "./domain/services/calcularFactura.js";
+import { BanxicoExchangeRateAdapter } from "./infrastructure/adapters/banxico-rate.adapter.js";
 import { JsonClienteRepository } from "./infrastructure/adapters/json-cliente.repository.js";
 import { LocalStorageAdapter } from "./infrastructure/adapters/local-storage.adapter.js";
-import { MockExchangeRateAdapter } from "./infrastructure/adapters/mock-rate.adapter.js";
+import { PuppeteerSatAdapter } from "./infrastructure/adapters/puppeteer-sat.adapter.js";
+
+const CLAVE_PROD_SERV = "81112100";
+const CLAVE_UNIDAD = "E48";
+const DESCRIPCION_CONCEPTO =
+	"Servicios profesionales de desarrollo de software";
 
 const mxnFormatter = new Intl.NumberFormat("es-MX", {
 	style: "currency",
@@ -128,15 +135,50 @@ async function resolverMonto(
 	return Number(input);
 }
 
+function mapearPayloadEmision(
+	cliente: Cliente,
+	factura: FacturaLog,
+): EmitirFacturaPayload {
+	return {
+		folioInterno: factura.folioInterno,
+		receptor: {
+			rfc: cliente.rfc,
+			razonSocial: cliente.razonSocial,
+			codigoPostal: cliente.codigoPostal,
+			regimenFiscal: cliente.regimenFiscal,
+			usoCFDI: cliente.usoCFDI,
+			residenciaFiscal: cliente.residenciaFiscal,
+			pais: cliente.pais,
+			numRegIdTrib: cliente.numRegIdTrib,
+		},
+		concepto: {
+			descripcion: DESCRIPCION_CONCEPTO,
+			cantidad: 1,
+			valorUnitario: factura.subtotalMXN,
+			importe: factura.subtotalMXN,
+			claveProdServ: CLAVE_PROD_SERV,
+			claveUnidad: CLAVE_UNIDAD,
+		},
+		subtotalMXN: factura.subtotalMXN,
+		iva: factura.iva,
+		retencionISR: factura.retencionISR,
+		totalMXN: factura.totalMXN,
+		moneda: "MXN",
+		tipoCambio: factura.tipoCambio,
+	};
+}
+
 async function ejecutarFacturacion(
 	clientId?: string,
 	montoFlag?: string,
+	dryRun = false,
 ): Promise<void> {
 	p.intro("Facturator — RESICO");
 
 	const clienteRepo = new JsonClienteRepository();
 	const storage = new LocalStorageAdapter();
-	const exchangeRate = new MockExchangeRateAdapter();
+	const exchangeRate = new BanxicoExchangeRateAdapter();
+	const billing = new PuppeteerSatAdapter();
 
 	try {
 		const cliente = await resolverCliente(clienteRepo, clientId);
@@ -154,6 +196,15 @@ async function ejecutarFacturacion(
 		};
 
 		p.note(formatearNota(factura, cliente), "Desglose Fiscal");
+
+		if (dryRun) {
+			p.log.warn("Modo --dry-run: se omite el timbrado en el portal SAT.");
+		} else {
+			p.log.step("Iniciando precarga en el portal SAT...");
+			const payload = mapearPayloadEmision(cliente, factura);
+			await billing.emitirFactura(payload);
+			p.log.success("Timbrado completado y archivos guardados.");
+		}
 
 		await storage.guardarFacturaLog(factura);
 
@@ -173,8 +224,15 @@ program
 	.description("CLI de facturación automatizada para RESICO")
 	.option("-c, --client <id>", "ID del cliente")
 	.option("-m, --monto <number>", "Monto a facturar")
-	.action(async (options: { client?: string; monto?: string }) => {
-		await ejecutarFacturacion(options.client, options.monto);
-	});
+	.option("--dry-run", "Calcula y registra el desglose sin abrir el portal SAT")
+	.action(
+		async (options: { client?: string; monto?: string; dryRun?: boolean }) => {
+			await ejecutarFacturacion(
+				options.client,
+				options.monto,
+				Boolean(options.dryRun),
+			);
+		},
+	);
 
 program.parse();
