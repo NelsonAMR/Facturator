@@ -1,5 +1,4 @@
-import { mkdir, rename } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, rename, stat } from "node:fs/promises";
 import { join } from "node:path";
 import * as p from "@clack/prompts";
 import puppeteer, {
@@ -27,15 +26,20 @@ export class PuppeteerSatAdapter implements IBillingAdapter {
 		payload: EmitirFacturaPayload,
 	): Promise<EmitirFacturaResult> {
 		const env = loadSatEnv();
-		const downloadDir = join(tmpdir(), `facturator-sat-${Date.now()}`);
-		await mkdir(downloadDir, { recursive: true });
+		const output = await resolveBillingOutputPaths(
+			env.outputBillingPath,
+			payload.folioInterno,
+			payload.quincena,
+		);
+
+		await mkdir(output.directory, { recursive: true });
 
 		let browser: Browser | null = null;
 
 		try {
 			browser = await this.launchBrowser();
 			const page = await browser.newPage();
-			await this.configureDownloads(page, downloadDir);
+			await this.configureDownloads(page, output.directory);
 
 			await this.login(page, env);
 			await this.navegarAFacturacion(page);
@@ -45,7 +49,7 @@ export class PuppeteerSatAdapter implements IBillingAdapter {
 			await this.confirmarTimbradoManual();
 
 			await this.sellarConEfirma(page, env);
-			await this.esperarDescargaYGuardar(page, downloadDir, env, payload);
+			await this.esperarDescargaYGuardar(page, output.directory, payload);
 
 			return { success: true };
 		} finally {
@@ -67,7 +71,7 @@ export class PuppeteerSatAdapter implements IBillingAdapter {
 		page: Page,
 		downloadDir: string,
 	): Promise<void> {
-		const client = await page.createCDPSession();
+		const client = await page.target().createCDPSession();
 		await client.send("Page.setDownloadBehavior", {
 			behavior: "allow",
 			downloadPath: downloadDir,
@@ -305,30 +309,31 @@ export class PuppeteerSatAdapter implements IBillingAdapter {
 	private async esperarDescargaYGuardar(
 		page: Page,
 		downloadDir: string,
-		env: SatEnvConfig,
 		payload: EmitirFacturaPayload,
 	): Promise<void> {
 		try {
-			const output = await resolveBillingOutputPaths(
-				env.outputBillingPath,
-				payload.folioInterno,
+			const before = new Set(
+				await readdir(downloadDir).catch(() => [] as string[]),
 			);
 
 			const xmlPath = await this.clickAndWaitDownload(
 				page,
 				SAT_SELECTORS.descarga.xml,
 				downloadDir,
+				before,
 				"descarga.xml",
 			);
-			await rename(xmlPath, output.xmlPath);
+			await rename(xmlPath, join(downloadDir, `${payload.folioInterno}.xml`));
 
+			const afterXml = new Set(await readdir(downloadDir));
 			const pdfPath = await this.clickAndWaitDownload(
 				page,
 				SAT_SELECTORS.descarga.pdf,
 				downloadDir,
+				afterXml,
 				"descarga.pdf",
 			);
-			await rename(pdfPath, output.pdfPath);
+			await rename(pdfPath, join(downloadDir, `${payload.folioInterno}.pdf`));
 		} catch (error) {
 			throw this.wrapError("descarga y guardado de XML/PDF", error);
 		}
@@ -338,14 +343,9 @@ export class PuppeteerSatAdapter implements IBillingAdapter {
 		page: Page,
 		selector: string,
 		downloadDir: string,
+		before: Set<string>,
 		label: string,
 	): Promise<string> {
-		const { readdir, stat } = await import("node:fs/promises");
-
-		const before = new Set(
-			await readdir(downloadDir).catch(() => [] as string[]),
-		);
-
 		await this.waitAndClick(page, selector, label);
 
 		const deadline = Date.now() + SAT_TIMEOUT_MS;

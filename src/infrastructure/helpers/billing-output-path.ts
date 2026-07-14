@@ -1,5 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { Quincena } from "../../domain/ports/billing.port.js";
 
 export interface BillingOutputPaths {
 	directory: string;
@@ -13,17 +14,16 @@ function pad2(value: number): string {
 
 /**
  * Ruta: {OUTPUT_BILLING_PATH}/{Año}/{Mes}_Q{1|2}/
- * Semestre: meses 01–06 → Q1, meses 07–12 → Q2.
+ * La quincena la elige el usuario en la CLI (Q1 | Q2).
  */
 export async function resolveBillingOutputPaths(
 	outputBillingPath: string,
 	folioInterno: string,
+	quincena: Quincena,
 	date: Date = new Date(),
 ): Promise<BillingOutputPaths> {
 	const year = String(date.getFullYear());
-	const monthNumber = date.getMonth() + 1;
-	const month = pad2(monthNumber);
-	const quincena = monthNumber <= 6 ? "Q1" : "Q2";
+	const month = pad2(date.getMonth() + 1);
 	const directory = join(outputBillingPath, year, `${month}_${quincena}`);
 
 	await mkdir(directory, { recursive: true });

@@ -13,5 +13,7 @@ export interface FacturaLog extends DesgloseFiscal {
 	clienteId: string;
 	razonSocial: string;
 	residenciaFiscal: string;
+	fechaPago: string;
+	descripcion: string;
 	createdAt: string;
 }

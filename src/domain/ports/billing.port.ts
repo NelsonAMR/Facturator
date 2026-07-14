@@ -18,6 +18,8 @@ export interface ConceptoPayload {
 	claveUnidad: string;
 }
 
+export type Quincena = "Q1" | "Q2";
+
 export interface EmitirFacturaPayload {
 	folioInterno: string;
 	receptor: ReceptorPayload;
@@ -28,6 +30,7 @@ export interface EmitirFacturaPayload {
 	totalMXN: number;
 	moneda: string;
 	tipoCambio: number | null;
+	quincena: Quincena;
 }
 
 export interface EmitirFacturaResult {

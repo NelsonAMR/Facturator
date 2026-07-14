@@ -3,17 +3,18 @@ import * as p from "@clack/prompts";
 import { Command } from "commander";
 import type { Cliente } from "./domain/entities/Cliente.js";
 import type { FacturaLog } from "./domain/entities/Factura.js";
-import type { EmitirFacturaPayload } from "./domain/ports/billing.port.js";
+import type {
+	EmitirFacturaPayload,
+	Quincena,
+} from "./domain/ports/billing.port.js";
 import { calcularDesgloseFiscal } from "./domain/services/calcularFactura.js";
 import { BanxicoExchangeRateAdapter } from "./infrastructure/adapters/banxico-rate.adapter.js";
 import { JsonClienteRepository } from "./infrastructure/adapters/json-cliente.repository.js";
 import { LocalStorageAdapter } from "./infrastructure/adapters/local-storage.adapter.js";
 import { PuppeteerSatAdapter } from "./infrastructure/adapters/puppeteer-sat.adapter.js";
 
-const CLAVE_PROD_SERV = "81112100";
-const CLAVE_UNIDAD = "E48";
-const DESCRIPCION_CONCEPTO =
-	"Servicios profesionales de desarrollo de software";
+const CLAVE_PROD_SERV_DEFAULT = "81112100";
+const CLAVE_UNIDAD_DEFAULT = "E48";
 
 const mxnFormatter = new Intl.NumberFormat("es-MX", {
 	style: "currency",
@@ -36,6 +37,8 @@ function formatearNota(factura: FacturaLog, cliente: Cliente): string {
 		`Cliente:        ${cliente.razonSocial}`,
 		`RFC:            ${cliente.rfc}`,
 		`Residencia:     ${cliente.residenciaFiscal}`,
+		`Fecha de pago:  ${factura.fechaPago}`,
+		`Descripción:    ${factura.descripcion}`,
 		"",
 		`Monto ingresado: ${montoFormateado} ${factura.monedaIngreso}`,
 	];
@@ -67,6 +70,50 @@ function validarMonto(valor: string | undefined): string | undefined {
 	if (Number.isNaN(monto) || monto <= 0) {
 		return "Ingresa un monto válido mayor a 0";
 	}
+}
+
+function validarFecha(valor: string | undefined): string | undefined {
+	if (!valor) {
+		return "Ingresa la fecha en formato YYYY-MM-DD";
+	}
+
+	const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+	if (!match) {
+		return "Formato inválido. Usa YYYY-MM-DD (ej. 2026-07-08)";
+	}
+
+	const year = Number(match[1]);
+	const month = Number(match[2]);
+	const day = Number(match[3]);
+	const date = new Date(year, month - 1, day);
+
+	if (
+		date.getFullYear() !== year ||
+		date.getMonth() !== month - 1 ||
+		date.getDate() !== day
+	) {
+		return "Fecha inválida";
+	}
+
+	const hoy = new Date();
+	hoy.setHours(23, 59, 59, 999);
+	if (date > hoy) {
+		return "La fecha de pago no puede ser futura";
+	}
+}
+
+function validarDescripcion(valor: string | undefined): string | undefined {
+	if (!valor?.trim()) {
+		return "Ingresa una descripción del concepto";
+	}
+}
+
+function hoyIso(): string {
+	const now = new Date();
+	const year = now.getFullYear();
+	const month = String(now.getMonth() + 1).padStart(2, "0");
+	const day = String(now.getDate()).padStart(2, "0");
+	return `${year}-${month}-${day}`;
 }
 
 async function resolverCliente(
@@ -107,6 +154,30 @@ async function resolverCliente(
 	return cliente;
 }
 
+async function resolverFechaPago(fechaFlag?: string): Promise<string> {
+	if (fechaFlag !== undefined) {
+		const error = validarFecha(fechaFlag);
+		if (error) {
+			throw new Error(error);
+		}
+
+		return fechaFlag;
+	}
+
+	const input = await p.text({
+		message: "Fecha del pago (YYYY-MM-DD)",
+		placeholder: hoyIso(),
+		defaultValue: hoyIso(),
+		validate: validarFecha,
+	});
+
+	if (p.isCancel(input)) {
+		throw new Error("Operación cancelada.");
+	}
+
+	return input;
+}
+
 async function resolverMonto(
 	cliente: Cliente,
 	montoFlag?: string,
@@ -124,7 +195,7 @@ async function resolverMonto(
 	const moneda = cliente.residenciaFiscal !== "MX" ? "USD" : "MXN";
 
 	const input = await p.text({
-		message: `Monto a facturar (${moneda})`,
+		message: `Cantidad del pago (${moneda})`,
 		validate: validarMonto,
 	});
 
@@ -135,9 +206,49 @@ async function resolverMonto(
 	return Number(input);
 }
 
+async function resolverDescripcion(descripcionFlag?: string): Promise<string> {
+	if (descripcionFlag !== undefined) {
+		const error = validarDescripcion(descripcionFlag);
+		if (error) {
+			throw new Error(error);
+		}
+
+		return descripcionFlag.trim();
+	}
+
+	const input = await p.text({
+		message: "Descripción del concepto",
+		placeholder: "Servicios profesionales de desarrollo de software",
+		validate: validarDescripcion,
+	});
+
+	if (p.isCancel(input)) {
+		throw new Error("Operación cancelada.");
+	}
+
+	return input.trim();
+}
+
+async function resolverQuincena(): Promise<Quincena> {
+	const seleccion = await p.select({
+		message: "¿A qué quincena corresponde este pago?",
+		options: [
+			{ value: "Q1" as const, label: "Q1", hint: "Primera quincena" },
+			{ value: "Q2" as const, label: "Q2", hint: "Segunda quincena" },
+		],
+	});
+
+	if (p.isCancel(seleccion)) {
+		throw new Error("Operación cancelada.");
+	}
+
+	return seleccion;
+}
+
 function mapearPayloadEmision(
 	cliente: Cliente,
 	factura: FacturaLog,
+	quincena: Quincena,
 ): EmitirFacturaPayload {
 	return {
 		folioInterno: factura.folioInterno,
@@ -152,12 +263,12 @@ function mapearPayloadEmision(
 			numRegIdTrib: cliente.numRegIdTrib,
 		},
 		concepto: {
-			descripcion: DESCRIPCION_CONCEPTO,
+			descripcion: factura.descripcion,
 			cantidad: 1,
 			valorUnitario: factura.subtotalMXN,
 			importe: factura.subtotalMXN,
-			claveProdServ: CLAVE_PROD_SERV,
-			claveUnidad: CLAVE_UNIDAD,
+			claveProdServ: cliente.claveProdServ ?? CLAVE_PROD_SERV_DEFAULT,
+			claveUnidad: cliente.claveUnidad ?? CLAVE_UNIDAD_DEFAULT,
 		},
 		subtotalMXN: factura.subtotalMXN,
 		iva: factura.iva,
@@ -165,14 +276,17 @@ function mapearPayloadEmision(
 		totalMXN: factura.totalMXN,
 		moneda: "MXN",
 		tipoCambio: factura.tipoCambio,
+		quincena,
 	};
 }
 
-async function ejecutarFacturacion(
-	clientId?: string,
-	montoFlag?: string,
-	dryRun = false,
-): Promise<void> {
+async function ejecutarFacturacion(options: {
+	clientId?: string;
+	montoFlag?: string;
+	fechaFlag?: string;
+	descripcionFlag?: string;
+	dryRun?: boolean;
+}): Promise<void> {
 	p.intro("Facturator — RESICO");
 
 	const clienteRepo = new JsonClienteRepository();
@@ -181,9 +295,17 @@ async function ejecutarFacturacion(
 	const billing = new PuppeteerSatAdapter();
 
 	try {
-		const cliente = await resolverCliente(clienteRepo, clientId);
-		const monto = await resolverMonto(cliente, montoFlag);
-		const desglose = await calcularDesgloseFiscal(cliente, monto, exchangeRate);
+		const cliente = await resolverCliente(clienteRepo, options.clientId);
+		const fechaPago = await resolverFechaPago(options.fechaFlag);
+		const monto = await resolverMonto(cliente, options.montoFlag);
+		const descripcion = await resolverDescripcion(options.descripcionFlag);
+
+		const desglose = await calcularDesgloseFiscal(
+			cliente,
+			monto,
+			exchangeRate,
+			fechaPago,
+		);
 		const folioInterno = await storage.generarSiguienteFolioInterno();
 
 		const factura: FacturaLog = {
@@ -192,16 +314,21 @@ async function ejecutarFacturacion(
 			clienteId: cliente.id,
 			razonSocial: cliente.razonSocial,
 			residenciaFiscal: cliente.residenciaFiscal,
+			fechaPago,
+			descripcion,
 			createdAt: new Date().toISOString(),
 		};
 
 		p.note(formatearNota(factura, cliente), "Desglose Fiscal");
 
-		if (dryRun) {
+		const quincena = await resolverQuincena();
+
+		if (options.dryRun) {
 			p.log.warn("Modo --dry-run: se omite el timbrado en el portal SAT.");
+			p.log.info(`Quincena seleccionada: ${quincena}`);
 		} else {
 			p.log.step("Iniciando precarga en el portal SAT...");
-			const payload = mapearPayloadEmision(cliente, factura);
+			const payload = mapearPayloadEmision(cliente, factura, quincena);
 			await billing.emitirFactura(payload);
 			p.log.success("Timbrado completado y archivos guardados.");
 		}
@@ -223,15 +350,25 @@ program
 	.name("facturator")
 	.description("CLI de facturación automatizada para RESICO")
 	.option("-c, --client <id>", "ID del cliente")
-	.option("-m, --monto <number>", "Monto a facturar")
+	.option("-m, --monto <number>", "Cantidad del pago")
+	.option("-f, --fecha <YYYY-MM-DD>", "Fecha del pago (para el tipo de cambio)")
+	.option("-d, --descripcion <texto>", "Descripción del concepto")
 	.option("--dry-run", "Calcula y registra el desglose sin abrir el portal SAT")
 	.action(
-		async (options: { client?: string; monto?: string; dryRun?: boolean }) => {
-			await ejecutarFacturacion(
-				options.client,
-				options.monto,
-				Boolean(options.dryRun),
-			);
+		async (options: {
+			client?: string;
+			monto?: string;
+			fecha?: string;
+			descripcion?: string;
+			dryRun?: boolean;
+		}) => {
+			await ejecutarFacturacion({
+				clientId: options.client,
+				montoFlag: options.monto,
+				fechaFlag: options.fecha,
+				descripcionFlag: options.descripcion,
+				dryRun: Boolean(options.dryRun),
+			});
 		},
 	);
 

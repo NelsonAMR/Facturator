@@ -8,6 +8,9 @@ export interface Cliente {
 	regimenFiscal: string;
 	usoCFDI: string;
 	moneda: "USD" | "MXN";
+	claveProdServ?: string;
+	claveUnidad?: string;
+	objetoImpuesto?: string;
 	email?: string;
 	pais?: string;
 	numRegIdTrib?: string;

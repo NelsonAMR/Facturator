@@ -3,7 +3,7 @@ import type { IExchangeRateAdapter } from "../../domain/ports/exchange-rate.port
 const TC_MOCK = 18.5;
 
 export class MockExchangeRateAdapter implements IExchangeRateAdapter {
-	async obtenerTipoCambioActual(): Promise<number | null> {
+	async obtenerTipoCambioActual(_fechaPago?: string): Promise<number | null> {
 		return TC_MOCK;
 	}
 }

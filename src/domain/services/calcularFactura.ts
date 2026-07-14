@@ -9,12 +9,18 @@ export async function calcularDesgloseFiscal(
 	cliente: Cliente,
 	monto: number,
 	exchangeRateAdapter: IExchangeRateAdapter,
+	fechaPago?: string,
 ): Promise<DesgloseFiscal> {
 	if (cliente.residenciaFiscal !== "MX") {
-		const tipoCambio = await exchangeRateAdapter.obtenerTipoCambioActual();
+		const tipoCambio =
+			await exchangeRateAdapter.obtenerTipoCambioActual(fechaPago);
 
 		if (tipoCambio === null) {
-			throw new Error("No se pudo obtener el tipo de cambio oficial.");
+			throw new Error(
+				fechaPago
+					? `No se pudo obtener el tipo de cambio oficial para la fecha ${fechaPago}.`
+					: "No se pudo obtener el tipo de cambio oficial.",
+			);
 		}
 
 		const subtotalMXN = monto * tipoCambio;
