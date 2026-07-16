@@ -3,6 +3,9 @@ import type { IExchangeRateAdapter } from "../../domain/ports/exchange-rate.port
 const BANXICO_SERIES_BASE =
 	"https://www.banxico.org.mx/SieAPIRest/service/v1/series/SF43718/datos";
 
+/** Días hacia atrás desde el día hábil anterior, por fines de semana / inhábiles. */
+const LOOKBACK_DAYS = 14;
+
 interface BanxicoDato {
 	fecha: string;
 	dato: string;
@@ -55,19 +58,28 @@ function parseIsoDate(fechaPago: string): Date | null {
 	return date;
 }
 
-function buildUrl(fechaPago?: string): string | null {
-	if (!fechaPago) {
-		return `${BANXICO_SERIES_BASE}/oportuno`;
-	}
+function hoyLocal(): Date {
+	const now = new Date();
+	return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
 
-	const end = parseIsoDate(fechaPago);
-	if (!end) {
+/**
+ * Para una fecha de operación/pago D, el TC fiscal de referencia (DOF del día)
+ * corresponde al FIX Banxico del día hábil bancario inmediato anterior.
+ * En SF43718 ese valor está fechado como D-1 (o el último hábil previo).
+ */
+function buildUrl(fechaPago?: string): string | null {
+	const operacion = fechaPago ? parseIsoDate(fechaPago) : hoyLocal();
+	if (!operacion) {
 		return null;
 	}
 
-	// Ventana de 10 días hacia atrás por si la fecha cae en fin de semana / día inhábil.
+	// Excluye el FIX determinado el mismo día D (aún no es el DOF de D).
+	const end = new Date(operacion);
+	end.setDate(end.getDate() - 1);
+
 	const start = new Date(end);
-	start.setDate(start.getDate() - 10);
+	start.setDate(start.getDate() - LOOKBACK_DAYS);
 
 	return `${BANXICO_SERIES_BASE}/${formatIsoDate(start)}/${formatIsoDate(end)}`;
 }
