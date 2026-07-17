@@ -1,6 +1,7 @@
 export interface SatEnvConfig {
-	rfc: string;
-	password: string;
+	/** Opcional: solo si se usa login CIEC (ya no es el flujo por defecto). */
+	rfc?: string;
+	password?: string;
 	efirmaCerPath: string;
 	efirmaKeyPath: string;
 	efirmaPassword: string;
@@ -15,6 +16,11 @@ function requireEnv(name: string): string {
 	}
 
 	return value;
+}
+
+function optionalEnv(name: string): string | undefined {
+	const value = process.env[name]?.trim();
+	return value || undefined;
 }
 
 function assertFileExtension(
@@ -39,8 +45,8 @@ export function loadSatEnv(): SatEnvConfig {
 	assertFileExtension(efirmaKeyPath, ".key", "SAT_EFIRMA_KEY_PATH");
 
 	return {
-		rfc: requireEnv("SAT_RFC"),
-		password: requireEnv("SAT_PASSWORD"),
+		rfc: optionalEnv("SAT_RFC"),
+		password: optionalEnv("SAT_PASSWORD"),
 		efirmaCerPath,
 		efirmaKeyPath,
 		efirmaPassword: requireEnv("SAT_EFIRMA_PASSWORD"),

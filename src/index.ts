@@ -26,6 +26,11 @@ const usdFormatter = new Intl.NumberFormat("en-US", {
 	currency: "USD",
 });
 
+function formatearTipoCambioDof(tc: number): string {
+	// Misma precisión que publica Banxico/DOF (ej. 17.4278), sin redondear a centavos.
+	return tc.toFixed(4);
+}
+
 function formatearNota(factura: FacturaLog, cliente: Cliente): string {
 	const montoFormateado =
 		factura.monedaIngreso === "USD"
@@ -45,7 +50,7 @@ function formatearNota(factura: FacturaLog, cliente: Cliente): string {
 
 	if (factura.tipoCambio !== null) {
 		lineas.push(
-			`Tipo de cambio:  ${mxnFormatter.format(factura.tipoCambio)} MXN/USD`,
+			`Tipo de cambio:  ${formatearTipoCambioDof(factura.tipoCambio)} MXN/USD`,
 		);
 	}
 
@@ -269,6 +274,7 @@ function mapearPayloadEmision(
 			importe: factura.subtotalMXN,
 			claveProdServ: cliente.claveProdServ ?? CLAVE_PROD_SERV_DEFAULT,
 			claveUnidad: cliente.claveUnidad ?? CLAVE_UNIDAD_DEFAULT,
+			objetoImpuesto: cliente.objetoImpuesto ?? "02",
 		},
 		subtotalMXN: factura.subtotalMXN,
 		iva: factura.iva,

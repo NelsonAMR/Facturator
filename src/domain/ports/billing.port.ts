@@ -16,6 +16,7 @@ export interface ConceptoPayload {
 	importe: number;
 	claveProdServ: string;
 	claveUnidad: string;
+	objetoImpuesto?: string;
 }
 
 export type Quincena = "Q1" | "Q2";

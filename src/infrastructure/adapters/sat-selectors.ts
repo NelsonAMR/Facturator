@@ -1,60 +1,173 @@
 /**
- * Selectores del portal portalcfdi.facturaelectronica.sat.gob.mx.
- * Validar/ajustar en la primera ejecución con headless: false.
+ * Selectores del portal Factura Electrónica SAT (v4.5.x / FormsBuilder MegaPac).
+ * view-model confirmados vía inventario DOM en GeneraFactura.
  */
 export const SAT_SELECTORS = {
 	urls: {
-		base: "https://portalcfdi.facturaelectronica.sat.gob.mx/",
-		login: "https://portalcfdi.facturaelectronica.sat.gob.mx/",
+		generaFactura:
+			"https://portal.facturaelectronica.sat.gob.mx/Factura/GeneraFactura",
+		base: "https://portal.facturaelectronica.sat.gob.mx/Factura/GeneraFactura",
 	},
 	login: {
+		formCiec: "#IDPLogin",
 		rfcInput: "#rfc",
-		passwordInput: "#password",
+		botonEfirma: "#buttonFiel",
+		efirmaFormMarker: "#privateKeyPassword, #txtCertificate, #btnCertificate",
+		cerInput: "#fileCertificate",
+		keyInput: "#filePrivateKey",
+		passwordInput: "#privateKeyPassword",
+		rfcEfirma: "#rfc",
 		submitButton: "#submit",
-		postLoginMarker: "#mainMenu, .menuPrincipal, a[href*='Generacion']",
+		postLoginMarker: "#tituloFI, #LogOut, .detalleUsuario",
+	},
+	formulario: {
+		htmlOutput: "#htmlOutput",
+		groupContainer: "#groupcontainer",
+		loadAjax: "#loadAjax",
+		modalesCarga: "#myModal, #ajaxModal, #modalValidando, #modalGuardando",
+		panelToggles:
+			'#groupcontainer .panel-heading a, #groupcontainer [data-toggle="collapse"], #groupcontainer .panel-title a',
 	},
 	navegacion: {
-		generacionMenu: "a[href*='Generacion'], #menuGeneracion",
-		nuevaFactura: "a[href*='NuevaFactura'], a[href*='nueva'], #btnNuevaFactura",
+		nuevaFactura: 'a[href="/Factura/GeneraFactura"]',
 	},
+	/**
+	 * Receptor — códigos E1350003PFAC* del inventario real.
+	 * Orden en UI: cliente → RFC → Nombre → CP → (exportación) → régimen → uso CFDI.
+	 */
 	receptor: {
-		rfc: "#Receptor_Rfc, input[name*='Rfc'][id*='Receptor']",
-		razonSocial: "#Receptor_Nombre, input[name*='Nombre'][id*='Receptor']",
-		codigoPostal: "#Receptor_DomicilioFiscalReceptor, #Receptor_CodigoPostal",
-		regimenFiscal:
-			"#Receptor_RegimenFiscalReceptor, select[name*='RegimenFiscal']",
-		usoCFDI: "#Receptor_UsoCFDI, select[name*='UsoCFDI']",
-		residenciaFiscal:
-			"#Receptor_ResidenciaFiscal, select[name*='ResidenciaFiscal']",
-		numRegIdTrib: "#Receptor_NumRegIdTrib, input[name*='NumRegIdTrib']",
-		pais: "#Receptor_Pais, select[name*='Pais']",
+		/** Autocomplete clientes frecuentes. */
+		rfcCargado: {
+			css: "[view-model='E1350003PFAC001Descrip']",
+			viewModels: ["E1350003PFAC001Descrip"],
+			labels: ["Cliente frecuente", "RFC"],
+		},
+		rfc: {
+			css: "[view-model='E1350003PFAC006']",
+			viewModels: ["E1350003PFAC006"],
+			labels: ["RFC"],
+		},
+		razonSocial: {
+			css: "[view-model='E1350003PFAC002']",
+			viewModels: ["E1350003PFAC002"],
+			labels: ["Nombre", "Razón social"],
+		},
+		/** DomicilioFiscalReceptor (CP). */
+		codigoPostal: {
+			css: "[view-model='E1350003PFAC005']",
+			viewModels: ["E1350003PFAC005"],
+			labels: ["Código postal", "Domicilio fiscal"],
+		},
+		regimenFiscal: {
+			css: "[view-model='E1350003PFAC009Descrip']",
+			viewModels: ["E1350003PFAC009Descrip"],
+			labels: ["Régimen fiscal", "Regimen fiscal"],
+		},
+		usoCFDI: {
+			css: "[view-model='E1350003PUsoFacturaMoralDescrip'], [view-model='E1350003PUsoFacturaFisicaDescrip']",
+			viewModels: [
+				"E1350003PUsoFacturaMoralDescrip",
+				"E1350003PUsoFacturaFisicaDescrip",
+			],
+			labels: ["Uso CFDI", "Uso de la factura"],
+		},
+		/** Checkbox paneldinamico="Es una Exportación". */
+		esExportacion: {
+			css: "[view-model='E1350003PFAC086']",
+			viewModels: ["E1350003PFAC086"],
+			labels: ["Es una Exportación", "Exportación"],
+		},
+		claveExportacion: {
+			css: "[view-model='E1350006PExportacion']",
+			viewModels: ["E1350006PExportacion"],
+			labels: ["Exportación"],
+		},
+		residenciaFiscal: {
+			css: "[view-model='E1350003PFAC085Descrip']",
+			viewModels: ["E1350003PFAC085Descrip"],
+			labels: ["Residencia fiscal"],
+		},
+		/** NumRegIdTrib: FAC008 está visible; FAC010 aparece tras exportación. */
+		numRegIdTrib: {
+			css: "[view-model='E1350003PFAC008'], [view-model='E1350003PFAC010'], [view-model='E1350003PFAC101']",
+			viewModels: ["E1350003PFAC008", "E1350003PFAC010", "E1350003PFAC101"],
+			labels: ["Num. Reg", "Registro", "Tax ID"],
+		},
+		pais: {
+			css: "[view-model='E1350003PFAC075']",
+			viewModels: ["E1350003PFAC075"],
+			labels: ["País", "Pais"],
+		},
 	},
+	/** Conceptos — E1350010P* confirmados en inventario. */
 	concepto: {
-		nuevoBoton: "#btnNuevoConcepto, button[id*='Concepto']",
-		descripcion:
-			"#Concepto_Descripcion, textarea[name*='Descripcion'], input[name*='Descripcion']",
-		cantidad: "#Concepto_Cantidad, input[name*='Cantidad']",
-		valorUnitario: "#Concepto_ValorUnitario, input[name*='ValorUnitario']",
-		importe: "#Concepto_Importe, input[name*='Importe']",
-		claveProdServ: "#Concepto_ClaveProdServ, input[name*='ClaveProdServ']",
-		claveUnidad: "#Concepto_ClaveUnidad, input[name*='ClaveUnidad']",
-		guardarConcepto: "#btnGuardarConcepto, button[id*='GuardarConcepto']",
+		nuevoBoton:
+			"#btnMuestraConcepto, #btnNuevoConcepto, a[id*='Concepto'], button[id*='Concepto']",
+		descripcion: {
+			css: "[view-model='E1350010PDescripcion']",
+			viewModels: ["E1350010PDescripcion"],
+			labels: ["Descripción"],
+		},
+		cantidad: {
+			css: "[view-model='E1350010PCantidad']",
+			viewModels: ["E1350010PCantidad"],
+			labels: ["Cantidad"],
+		},
+		valorUnitario: {
+			css: "[view-model='E1350010PValorUnitario']",
+			viewModels: ["E1350010PValorUnitario"],
+			labels: ["Valor unitario"],
+		},
+		importe: {
+			css: "[view-model='E1350010PImporte']",
+			viewModels: ["E1350010PImporte"],
+			labels: ["Importe"],
+		},
+		claveProdServ: {
+			css: "[view-model='E1350010PProductoServicio']",
+			viewModels: ["E1350010PProductoServicio"],
+			labels: ["Producto", "servicio", "Clave"],
+		},
+		claveUnidad: {
+			css: "[view-model='E1350010PClaveUnidad']",
+			viewModels: ["E1350010PClaveUnidad"],
+			labels: ["Clave de unidad", "Unidad"],
+		},
+		objetoImp: {
+			css: "[view-model='E1350010PObjetoImp']",
+			viewModels: ["E1350010PObjetoImp"],
+			labels: ["Objeto de impuesto", "ObjetoImp"],
+		},
+		guardarConcepto:
+			"#btnAceptarModal, #tabConceptos #btnAceptarModal, #btnGuardarConcepto, button[id*='Aceptar']",
 	},
 	sellado: {
-		botonSellar: "#btnSellar, button[id*='Sellar'], a[id*='Sellar']",
+		botonSellar: "a.btn-sellar-factura",
+		modalConfirmar: "#ModalConfirmarSellar",
+		confirmarEnModal: "#ModalConfirmarSellar a.btn-sellar-factura",
+		fileDialog: "#fileDialog",
 		cerInput:
-			"input[type='file'][accept*='.cer'], #Certificate, input[name*='cer']",
+			"#fileCertificate, input[type='file'][accept*='.cer'], #Certificate",
 		keyInput:
-			"input[type='file'][accept*='.key'], #PrivateKey, input[name*='key']",
+			"#filePrivateKey, input[type='file'][accept*='.key'], #PrivateKey",
 		passwordInput:
-			"#PrivateKeyPassword, input[type='password'][name*='Password'], input[name*='password']",
-		confirmarSello: "#btnFirmar, #btnConfirmarSello, button[id*='Firmar']",
+			"#privateKeyPassword, #PrivateKeyPassword, input[type='password'][name*='Password']",
+		confirmarSello:
+			"#submit, #btnFirmar, #btnConfirmarSello, button[id*='Firmar']",
 	},
 	descarga: {
-		xml: "a[href*='.xml'], #btnDescargarXml, a[id*='Xml']",
+		xml: "a[href*='.xml'], #btnDescargarXml, a[id*='Xml'], #linkBajarZip",
 		pdf: "a[href*='.pdf'], #btnDescargarPdf, a[id*='Pdf']",
 	},
 } as const;
 
+/** Pistas para localizar controles FormsBuilder. */
+export type SatFieldHints = {
+	css: string;
+	viewModels: readonly string[];
+	labels: readonly string[];
+};
+
 export const SAT_TIMEOUT_MS = 30_000;
 export const SAT_LOGIN_TIMEOUT_MS = 120_000;
+export const SAT_FORM_TIMEOUT_MS = 90_000;
